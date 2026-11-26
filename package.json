@@ -1,0 +1,7 @@
+{
+  "name": "market-bell",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=24" },
+  "scripts": { "start": "node src/local.js", "test": "node --test" }
+}

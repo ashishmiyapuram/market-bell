@@ -1,0 +1,17 @@
+{
+  "name": "market-bell",
+  "main": "src/worker.js",
+  "compatibility_date": "2025-06-01",
+  "workers_dev": true,
+  "preview_urls": false,
+  "ratelimits": [{
+    "name": "LOGIN_LIMITER",
+    "namespace_id": "701485",
+    "simple": { "limit": 8, "period": 60 }
+  }],
+  "d1_databases": [{
+    "binding": "DB",
+    "database_name": "stock-alerts",
+    "database_id": "REPLACE_WITH_YOUR_D1_DATABASE_UUID"
+  }]
+}
