@@ -3,6 +3,7 @@
   "main": "src/worker.js",
   "compatibility_date": "2025-06-01",
   "workers_dev": true,
+  "keep_vars": true,
   "preview_urls": false,
   "ratelimits": [{
     "name": "LOGIN_LIMITER",
