@@ -12,6 +12,6 @@
   "d1_databases": [{
     "binding": "DB",
     "database_name": "stock-alerts",
-    "database_id": "REPLACE_WITH_YOUR_D1_DATABASE_UUID"
+    "database_id": "635ecc10-da22-48f5-86f2-8b8f0b2bbbd7"
   }]
 }
