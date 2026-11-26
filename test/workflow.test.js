@@ -21,6 +21,9 @@ test('sign in, scan both markets twice, export records, and sign out', async t =
   const env = { DB, APP_USERNAME: 'demo', APP_PASSWORD: 'test-password', SESSION_SECRET: 'a'.repeat(64) };
   const origin = 'https://stocks.example';
   const request = (path, options) => worker.fetch(new Request(origin + path, options), env);
+  const loginPage = await request('/login');
+  assert.equal(loginPage.headers.get('Referrer-Policy'), 'same-origin');
+  assert.equal((await request('/login', { method: 'POST', headers: { Origin: 'https://other.example' } })).status, 403);
   assert.equal((await request('/emails.csv')).headers.get('Location'), '/login');
   const credentials = password => ({ method: 'POST', headers: { Origin: origin },
     body: new URLSearchParams({ username: 'demo', password }) });
