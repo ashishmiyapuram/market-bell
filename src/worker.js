@@ -41,7 +41,8 @@ function sessionCookie(request, token, age) {
 const headers = {
   'Cache-Control': 'no-store',
   'X-Content-Type-Options': 'nosniff',
-  'Referrer-Policy': 'no-referrer',
+  // Keep the Origin header on same-origin form submissions.
+  'Referrer-Policy': 'same-origin',
   'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'"
 };
 
