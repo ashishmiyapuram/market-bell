@@ -1,18 +1,30 @@
 import { DatabaseSync } from 'node:sqlite';
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 
 export function openDatabase(path = ':memory:') {
   const sqlite = new DatabaseSync(path);
-  if (!sqlite.prepare("SELECT 1 FROM sqlite_master WHERE name = 'runs'").get()) {
-    try {
-      sqlite.exec('BEGIN');
-      sqlite.exec(readFileSync(new URL('../migrations/0001_initial.sql', import.meta.url), 'utf8'));
-      sqlite.exec('COMMIT');
-    } catch (error) {
-      sqlite.exec('ROLLBACK');
-      sqlite.close();
-      throw error;
+  const migrations = new URL('../migrations/', import.meta.url);
+  const exists = name => Boolean(sqlite.prepare("SELECT 1 FROM sqlite_schema WHERE type = 'table' AND name = ?").get(name));
+  try {
+    sqlite.exec('BEGIN IMMEDIATE');
+    const legacy = exists('runs') && !exists('d1_migrations');
+    sqlite.exec(`CREATE TABLE IF NOT EXISTS d1_migrations (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT UNIQUE,
+      applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
+    )`);
+    const record = sqlite.prepare('INSERT INTO d1_migrations (name) VALUES (?)');
+    const applied = sqlite.prepare('SELECT name FROM d1_migrations WHERE name = ?');
+    if (legacy) record.run('0001_initial.sql');
+    for (const file of readdirSync(migrations).filter(name => name.endsWith('.sql')).sort()) {
+      if (applied.get(file)) continue;
+      sqlite.exec(readFileSync(new URL(file, migrations), 'utf8'));
+      record.run(file);
     }
+    sqlite.exec('COMMIT');
+  } catch (error) {
+    sqlite.exec('ROLLBACK');
+    sqlite.close();
+    throw error;
   }
 
   return {

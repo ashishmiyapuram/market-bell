@@ -1,6 +1,6 @@
 # Market Bell
 
-A private prototype for testing a stock-alert workflow across US and Indian markets. Version one uses fictional daily closes. It calculates a 50-session moving-average crossover, suggests a 1% price buffer, and stores a recommendation with a matching email record.
+A private prototype for testing a stock-alert workflow across US and Indian markets. The sample workflow uses fictional daily closes. The market watchlist can also read real daily closes from Twelve Data and Upstox. It calculates a 50-session moving-average crossover, suggests a 1% price buffer, and stores a recommendation with a matching email record.
 
 ## Try it locally
 
@@ -36,6 +36,16 @@ GitHub Actions runs tests on pull requests and pushes to `main`. In the Cloudfla
 
 See [Cloudflare production branch setup](https://developers.cloudflare.com/workers/ci-cd/builds/build-branches/) and [Resend sender restrictions](https://resend.com/docs/api-reference/errors).
 
-## Scope of this prototype
+## Connect market data
 
-The editable live watchlist, provider integrations, unattended five-minute and daily scans, simulated fills, fundamentals, and news are later milestones. The second sample scan demonstrates a sell after a buy signal. It uses a scripted scenario without trade-fill modeling. There is no broker execution.
+The Market watchlist starts with Apple and Microsoft on Nasdaq, and Reliance Industries and ICICI Bank on NSE. Either provider can be enabled independently.
+
+1. Apply the market-data migration to the existing D1 database before deploying the updated Worker. `npx wrangler d1 migrations apply stock-alerts --remote` applies any outstanding files.
+2. Get a [Twelve Data Basic key](https://twelvedata.com/pricing) and an [Upstox Analytics Token](https://upstox.com/developer/api-documentation/announcements/analytics-token/). The Upstox token is read-only.
+3. Under the Worker’s **Settings → Runtime variables and secrets**, add `TWELVE_DATA_API_KEY` and `UPSTOX_ANALYTICS_TOKEN` as Production secrets. Dashboard variables are retained by future Wrangler deploys. Keep API credentials out of Git.
+4. Sign in and use **Check market data**. Check that the table shows the provider, completed session date, and close. A holiday, late daily bar, or provider failure leaves the last stored close visible and suppresses signals for that check.
+5. After checking both feeds, add the Production runtime variable `LIVE_SCHEDULE_ENABLED` with value `1`. Weekday scans run at 8:00 a.m. India time and 5:30 a.m. Eastern Standard Time or 6:30 a.m. Eastern Daylight Time. Each scan requests the previous weekday's completed prices. Weekend and missing-session bars never produce a catch-up alert.
+
+The app evaluates the 50-session crossover from 51 reported closes and sends only before the next regular opening window. A sell signal follows an earlier recorded buy signal for that symbol. It expresses a change in the strategy and does not represent a tracked holding or fill. The app can show prices on a manual scan outside the alert window. Resend delivery uses the existing `RESEND_API_KEY`, `ALERT_FROM`, and `ALERT_TO` secrets when present. Otherwise alerts are saved as email previews.
+
+The dashboard and CSVs label records by source. Intraday polling, an editable watchlist, simulated fills, corporate-action validation across providers, fundamentals, and news are outside this daily-price release. The second sample scan demonstrates a sell after a buy signal. It uses a scripted scenario without trade-fill modeling. There is no broker execution.

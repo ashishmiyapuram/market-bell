@@ -66,17 +66,30 @@ export function login(error) {
 
 const money = (value, currency) => currency + ' ' + (value / 100).toFixed(2);
 
-export function dashboard({ watchlist, runs, signals, emails }) {
+export function dashboard({ watchlist, runs, signals, emails, liveStocks, markets, scheduleEnabled }) {
   const stockCards = watchlist.map(stock => `<div class="stock"><strong>${escape(stock.company)}</strong>
     <p class="muted">${escape(stock.symbol)} · ${stock.market === 'US' ? 'United States' : 'India'}</p></div>`).join('');
+  const liveRows = liveStocks.map(stock => {
+    const market = markets[stock.market];
+    const status = market.configured ? stock.status ?? 'Awaiting first scan' : 'Credentials needed';
+    return `<tr><td><strong>${escape(stock.symbol)}</strong><br>${escape(stock.company)}</td>
+      <td>${escape(stock.exchange)}<br>${escape(market.source)}</td>
+      <td class="money">${stock.close_price === null ? '—' : money(stock.close_price, market.currency)}<br>${escape(stock.close_date)}</td>
+      <td>${escape(status)}<br>${stock.requested_date ? 'Session checked ' + escape(stock.requested_date) : ''}</td>
+      <td>${escape(stock.checked_at ?? '—')}</td></tr>`;
+  }).join('');
+  const canScan = Object.values(markets).some(market => market.configured);
   const signalRows = signals.map(signal => `<tr><td>${escape(signal.market_date)}</td>
-    <td><strong>${escape(signal.symbol)}</strong><br>${escape(signal.company)}</td>
+    <td><strong>${escape(signal.symbol)}</strong><br>${escape(signal.company)}
+    ${signal.exchange ? '<br>' + escape(signal.exchange) : ''}</td>
+    <td>${escape(signal.source)}</td>
     <td class="${signal.action.toLowerCase()}">${signal.action}</td>
     <td class="money">${money(signal.trigger_price, signal.currency)}</td>
     <td class="money">${money(signal.limit_price, signal.currency)}</td>
     <td>${escape(signal.reason)}</td></tr>`).join('');
   const emailRows = emails.map(email => `<tr><td><details><summary>${escape(email.subject)}</summary>
-    <p>${escape(email.body)}</p></details></td><td>${escape(email.recipient || 'Local preview')}</td>
+    <p>${escape(email.body)}</p></details></td><td>${escape(email.source)}</td>
+    <td>${escape(email.recipient || 'Local preview')}</td>
     <td>${escape(email.status)}</td><td>${escape(email.created_at)}</td>
     <td>${escape(email.accepted_at ?? '—')}</td></tr>`).join('');
   const last = runs[0];
@@ -85,20 +98,27 @@ export function dashboard({ watchlist, runs, signals, emails }) {
 
   return page('Dashboard', `<div class="row hero">
     <div><h1>Watchlist dashboard</h1><p class="muted">Review US and India stock signals and their email history.</p></div>
-    <form method="post" action="/scan"><button class="primary"${runs.length >= 2 && !hasRetry ? ' disabled' : ''}>
-    ${runs.length >= 2 ? hasRetry ? 'Retry queued emails' : 'Sample complete' : 'Run sample scan'}</button></form>
     </div>
-    <p class="notice">Sample mode uses fictional stocks and prices. Run two scans to see a buy signal followed by a sell signal for each market.</p>
-    <section><div class="row"><h2>Watchlist</h2><p class="muted">Last scan ${last ? escape(last.scanned_at) : 'pending'}</p></div>
+    <section><div class="row"><h2>Market watchlist</h2>
+    <form method="post" action="/scan-market"><button class="primary"${canScan ? '' : ' disabled'}>Check market data</button></form></div>
+    <p class="muted">Uses the previous session’s daily close. Scheduled scans are ${scheduleEnabled ? 'enabled' : 'off'}.</p>
+    ${canScan ? '' : '<p class="notice">Connect a Twelve Data key or an Upstox Analytics Token to check prices.</p>'}
+    <div class="scroller"><table aria-label="Market watchlist"><thead><tr>
+    <th>Company</th><th>Exchange and source</th><th>Latest stored close</th><th>Scan status</th><th>Checked (UTC)</th>
+    </tr></thead><tbody>${liveRows}</tbody></table></div></section>
+    <section><div class="row"><h2>Sample watchlist</h2>
+    <form method="post" action="/scan"><button${runs.length >= 2 && !hasRetry ? ' disabled' : ''}>
+    ${runs.length >= 2 ? hasRetry ? 'Retry queued emails' : 'Sample complete' : 'Run sample scan'}</button></form></div>
+    <p class="muted">Fictional prices. Last sample scan ${last ? escape(last.scanned_at) : 'pending'}.</p>
     <div class="grid">${stockCards}</div></section>
     <section><div class="row"><h2>Recommendations</h2><a class="button" href="/recommendations.csv">Download CSV</a></div>
     ${signals.length ? `<div class="scroller"><table aria-label="Recommendations"><thead><tr>
-    <th>Market date</th><th>Company</th><th>Signal</th><th>Trigger close</th><th>Suggested limit</th><th>Reason</th>
-    </tr></thead><tbody>${signalRows}</tbody></table></div>` : '<p class="muted">A sample scan will add the first recommendations.</p>'}
+    <th>Market date</th><th>Company</th><th>Source</th><th>Signal</th><th>Trigger close</th><th>Suggested limit</th><th>Reason</th>
+    </tr></thead><tbody>${signalRows}</tbody></table></div>` : '<p class="muted">Recommendations appear when a scan finds a buy or sell signal.</p>'}
     </section>
     <section><div class="row"><h2>Email history</h2><a class="button" href="/emails.csv">Download CSV</a></div>
     ${emails.length ? `<div class="scroller"><table aria-label="Email history"><thead><tr>
-    <th>Subject</th><th>Recipient</th><th>Status</th><th>Created (UTC)</th><th>Accepted (UTC)</th>
+    <th>Subject</th><th>Source</th><th>Recipient</th><th>Status</th><th>Created (UTC)</th><th>Accepted (UTC)</th>
     </tr></thead><tbody>${emailRows}</tbody></table></div>` : '<p class="muted">Email previews appear here when a signal is generated.</p>'}
     </section>`, true);
 }
@@ -111,8 +131,8 @@ function csvCell(value) {
 
 export function csv(data, signals) {
   const headings = signals
-    ? ['id', 'market_date', 'market', 'symbol', 'company', 'action', 'currency', 'trigger_price', 'limit_price', 'reason']
-    : ['alert_id', 'market', 'symbol', 'recipient', 'subject', 'body', 'created_at', 'status', 'accepted_at', 'provider_id'];
+    ? ['id', 'market_date', 'market', 'symbol', 'company', 'action', 'currency', 'trigger_price', 'limit_price', 'reason', 'exchange', 'source']
+    : ['alert_id', 'market', 'symbol', 'recipient', 'subject', 'body', 'created_at', 'status', 'accepted_at', 'provider_id', 'source'];
   const records = data.map(row => headings.map(key => {
     const value = signals && ['trigger_price', 'limit_price'].includes(key) ? (row[key] / 100).toFixed(2) : row[key];
     return csvCell(value);

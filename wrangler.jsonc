@@ -5,6 +5,7 @@
   "workers_dev": true,
   "keep_vars": true,
   "preview_urls": false,
+  "triggers": { "crons": ["30 10 * * MON-FRI", "30 2 * * MON-FRI"] },
   "ratelimits": [{
     "name": "LOGIN_LIMITER",
     "namespace_id": "701485",

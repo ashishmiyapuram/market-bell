@@ -9,7 +9,9 @@ const env = {
   DB: openDatabase(process.env.LOCAL_DB ?? 'tradingapp.sqlite'),
   APP_USERNAME: process.env.APP_USERNAME ?? 'demo',
   APP_PASSWORD: process.env.APP_PASSWORD ?? 'stock-demo',
-  SESSION_SECRET: randomBytes(32).toString('hex')
+  SESSION_SECRET: randomBytes(32).toString('hex'),
+  TWELVE_DATA_API_KEY: process.env.TWELVE_DATA_API_KEY,
+  UPSTOX_ANALYTICS_TOKEN: process.env.UPSTOX_ANALYTICS_TOKEN
 };
 const server = createServer(async (incoming, outgoing) => {
   try {

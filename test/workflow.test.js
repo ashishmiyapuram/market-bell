@@ -36,8 +36,14 @@ test('sign in, scan both markets twice, export records, and sign out', async t =
   const post = { method: 'POST', headers: { Cookie, Origin: origin } };
   assert.equal((await request('/scan', { method: 'POST', headers: { Cookie } })).status, 403);
   for (let scan = 0; scan < 3; scan++) assert.equal((await request('/scan', post)).status, 303);
+  assert.equal((await request('/scan-market', { method: 'POST', headers: { Cookie } })).status, 403);
+  assert.equal((await request('/scan-market', post)).status, 303);
   const home = await request('/', { headers: { Cookie } });
-  assert.match(await home.text(), /Sample complete/);
+  const page = await home.text();
+  assert.match(page, /Sample complete/);
+  assert.match(page, /Twelve Data/);
+  assert.match(page, /Upstox/);
+  assert.match(page, /Credentials needed/);
   const results = await (await request('/recommendations.csv', { headers: { Cookie } })).text();
   assert.equal(results.trim().split('\r\n').length, 5);
   assert.match(results, /"USD","101.00","102.01"/);
