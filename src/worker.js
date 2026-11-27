@@ -1,5 +1,7 @@
 import { evaluateCloses } from './strategy.js';
 import { dashboard, login, csv } from './views.js';
+import { marketProfiles } from './market-data.js';
+import { marketForCron, runLiveScan } from './live-scan.js';
 
 const cookieName = 'stock_alert_session';
 const sessionLifetime = 8 * 60 * 60;
@@ -70,7 +72,7 @@ function prices(run, market) {
 
 export async function runDemo(env) {
   const db = env.DB;
-  const last = await db.prepare('SELECT MAX(id) AS id FROM runs').first();
+  const last = await db.prepare('SELECT MAX(id) AS id FROM runs WHERE id BETWEEN 1 AND 2').first();
   const run = (last.id ?? 0) + 1;
   if (run > 2) return;
   const now = new Date().toISOString();
@@ -149,8 +151,12 @@ async function sendPending(env) {
 }
 
 const selectSignals = 'SELECT * FROM alerts ORDER BY id DESC';
-const selectEmails = `SELECT emails.*, alerts.market, alerts.symbol FROM emails
+const selectEmails = `SELECT emails.*, alerts.market, alerts.symbol, alerts.source FROM emails
   JOIN alerts ON alerts.id = emails.alert_id ORDER BY alert_id DESC`;
+const selectLive = `SELECT stocks.*, observations.checked_at, observations.requested_date,
+  observations.status, observations.close_date, observations.close_price
+  FROM market_watchlist AS stocks LEFT JOIN market_observations AS observations USING (market, symbol)
+  ORDER BY stocks.market DESC, stocks.symbol`;
 
 async function handle(request, env) {
   const url = new URL(request.url);
@@ -186,18 +192,27 @@ async function handle(request, env) {
   const db = env.DB;
   if (request.method === 'POST') {
     if (url.pathname === '/logout') return redirect('/login', sessionCookie(request, '', 0));
+    if (url.pathname === '/scan-market') {
+      await runLiveScan(env);
+      await sendPending(env);
+      return redirect('/');
+    }
     if (url.pathname === '/scan') {
       await runDemo(env);
       await sendPending(env);
       return redirect('/');
     }
   } else if (url.pathname === '/') {
-    const [watchlist, runs, signals, emails] = await Promise.all([
+    const [watchlist, runs, signals, emails, liveStocks] = await Promise.all([
       rows(db, 'SELECT * FROM watchlist ORDER BY market DESC, symbol'),
-      rows(db, 'SELECT * FROM runs ORDER BY id DESC'),
-      rows(db, selectSignals), rows(db, selectEmails)
+      rows(db, 'SELECT * FROM runs WHERE id BETWEEN 1 AND 2 ORDER BY id DESC'),
+      rows(db, selectSignals), rows(db, selectEmails), rows(db, selectLive)
     ]);
-    return html(dashboard({ watchlist, runs, signals, emails }));
+    const markets = Object.fromEntries(Object.entries(marketProfiles).map(([market, profile]) => [
+      market, { source: profile.source, currency: profile.currency, configured: Boolean(env[profile.secret]) }
+    ]));
+    return html(dashboard({ watchlist, runs, signals, emails, liveStocks, markets,
+      scheduleEnabled: env.LIVE_SCHEDULE_ENABLED === '1' }));
   } else if (['/recommendations.csv', '/emails.csv'].includes(url.pathname)) {
     const signals = url.pathname === '/recommendations.csv';
     const data = await rows(db, signals ? selectSignals : selectEmails);
@@ -210,6 +225,12 @@ async function handle(request, env) {
 }
 
 export default {
+  async scheduled(controller, env) {
+    const market = marketForCron(controller.cron);
+    if (env.LIVE_SCHEDULE_ENABLED !== '1' || !market || !env[marketProfiles[market].secret]) return;
+    await runLiveScan(env, { market, now: new Date(controller.scheduledTime) });
+    await sendPending(env);
+  },
   async fetch(request, env) {
     try {
       return await handle(request, env);
